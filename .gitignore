@@ -220,4 +220,6 @@ __marimo__/
 
 #--------------------
 # my stuff
-assets/ 
+lib64
+bin/
+pyvenv.cfg
