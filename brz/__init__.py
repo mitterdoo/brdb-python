@@ -2,7 +2,7 @@ from struct import Struct, unpack, pack, unpack_from, pack_into
 from dataclasses import dataclass, field
 from enum import Enum
 from os import SEEK_SET, SEEK_CUR, SEEK_END
-from errors import *
+from .errors import *
 from io import BytesIO
 from blake3 import blake3
 import os
@@ -50,15 +50,26 @@ class BRZFolder(BRZFile):
 	children: dict[str, BRZFile] = field(default_factory=dict)
 	is_folder: bool = True
 
-@dataclass
 class BRZ:
-	version: EFormatVersion = EFormatVersion.INITIAL
-	index_compression_method: ECompressionMethod = ECompressionMethod.NONE
-	index_decompressed_length: int = 0
-	index_compressed_length: int = 0
-	index_hash: bytes = b''
-	index: BRZIndex = field(default_factory=BRZIndex)
-	tree: BRZFolder = field(default_factory=BRZFolder)
+	def __init__(self, file_path: str = None):
+		self.version: EFormatVersion = EFormatVersion.INITIAL
+		self.index_compression_method: ECompressionMethod = ECompressionMethod.NONE
+		self.index_decompressed_length: int = 0
+		self.index_compressed_length: int = 0
+		self.index_hash: bytes = b''
+		self.index: BRZIndex = BRZIndex
+		self.tree: BRZFolder = BRZFolder()
+
+		if file_path != None:
+			self._begin_reader(file_path)
+	
+	def _begin_reader(self, file_path):
+		with open(file_path, 'rb') as f:
+			reader = BRZReader(f, self)
+			reader.read_archive()
+	
+	def save(self, path: str = None):
+		raise NotImplemented
 
 	def dump(self, path: str):
 		'''
@@ -169,9 +180,9 @@ class BRZ:
 
 
 class BRZReader:
-	def __init__(self, file):
+	def __init__(self, file, brz):
 		self.file = file
-		self.brz = BRZ()
+		self.brz = brz
 	
 	def _read(self, count, f = None) -> bytes:
 		if f == None:
@@ -340,7 +351,5 @@ class BRZReader:
 			item.parent.children[item.name] = item
 
 if __name__ == '__main__':
-	with open('single brick.brz', 'rb') as f:
-		reader = BRZReader(f)
-		reader.read_archive()
+	brz = BRZ('assets/single brick.brz')
 		
