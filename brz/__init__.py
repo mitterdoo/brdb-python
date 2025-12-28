@@ -18,6 +18,9 @@ class ECompressionMethod(Enum):
 
 @dataclass
 class BRZIndex:
+	"""Internal class used for reading the index of a .brz file
+	Discarded after use
+	"""
 	folder_count: int = 0
 	file_count: int = 0
 	blob_count: int = 0
@@ -32,6 +35,9 @@ class BRZIndex:
 BRZFile = None # sigh... forward declaration for using the type later
 @dataclass
 class BRZFile:
+	"""Represents a file inside a .brz, including the raw uncompressed data as bytes.
+	Do not create yourself. Creation is handled in the `BRZ` class.
+	"""
 	name: str = ''
 	parent: BRZFile = None
 	data: bytes = None
@@ -47,11 +53,17 @@ class BRZFile:
 
 @dataclass
 class BRZFolder(BRZFile):
+	"""Same as a file but has a folder, and the data property is unused."""
 	children: dict[str, BRZFile] = field(default_factory=dict)
 	is_folder: bool = True
 
 class BRZ:
+	"""Main class used to open (and maybe later create/modify) the contents of .brz files.
+	Has functionality to browse/modify the embedded filesystem (as loaded in memory, not on disk).
+	Changes made to the filesystem only reside in memory and do not reflect to disk.
+	There is no functionality to export a .brz at this time."""
 	def __init__(self, file_path: str = None):
+		"""If a `file_path` to a .brz file is provided, opens that file for reading and makes a usable BRZ object."""
 		self.version: EFormatVersion = EFormatVersion.INITIAL
 		self.index_compression_method: ECompressionMethod = ECompressionMethod.NONE
 		self.index_decompressed_length: int = 0
@@ -69,6 +81,7 @@ class BRZ:
 			reader.read_archive()
 	
 	def save(self, path: str = None):
+		"""Sorry, not implemented at this time."""
 		raise NotImplemented
 
 	def dump(self, path: str):
@@ -94,11 +107,10 @@ class BRZ:
 						output.write(buffer.read())
 	
 	def open(self, path: str, mode: str) -> BytesIO:
-		# open the BRZ file as a BytesIO stream.
-				
-		# r mode for read
-		# w mode for write
-		# only binary mode
+		"""Open a file embedded inside the BRZ filesystem as a BytesIO stream.
+		Use 'r' mode for read.
+		Use 'w' mode for write.
+		Only supports binary mode, so the 'b' flag is always implied and is not required."""
 		# this really just tells the code whether it needs to check for existing file
 		# is there a cleaner way to do this? it just feels weird cause BytesIO doesn't care about read/write
 		# meh
@@ -121,16 +133,18 @@ class BRZ:
 		return stream
 		
 	def mkdir(self, path):
-		pass
+		raise NotImplemented
 	
 	def remove(self, path):
-		pass
+		raise NotImplemented
 	
 	def dirname(self, path):
+		"""see os.path.dirname"""
 		separated = self._split(path)
 		return separated[0:-1] # get everything except last item. auto-handles empty lists
 
 	def basename(self, path):
+		"""see os.path.basename"""
 		separated = self._split(path)
 		if len(separated) > 0:
 			return separated[-1]
@@ -138,6 +152,7 @@ class BRZ:
 			return ''
 	
 	def ls(self, path) -> list[str]:
+		"""lists files and folders in a path"""
 		folder = self._locate(path)
 		if not folder.is_folder:
 			raise NotADirectoryError(f'path "{folder.path()}" is not a folder')
@@ -145,6 +160,7 @@ class BRZ:
 		return list(folder.children.keys())
 	
 	def exists(self, path) -> bool:
+		"""see os.path.exists"""
 		try:
 			self._locate(path)
 		except FileNotFoundError:
@@ -152,6 +168,7 @@ class BRZ:
 		return True
 
 	def isdir(self, path) -> bool:
+		"""see os.path.isdir"""
 		item = self._locate(path)
 		return item.is_folder
 	
@@ -180,6 +197,7 @@ class BRZ:
 
 
 class BRZReader:
+	"""helper class for reading and parsing BRZ files and initializing a BRZ class with the contents"""
 	def __init__(self, file, brz):
 		self.file = file
 		self.brz = brz
@@ -350,6 +368,3 @@ class BRZReader:
 				raise BRZFormatError(f'folder "{item.parent.path()}" already has child item "{item.name}" but a duplicate is trying to be added')
 			item.parent.children[item.name] = item
 
-if __name__ == '__main__':
-	brz = BRZ('assets/single brick.brz')
-		
