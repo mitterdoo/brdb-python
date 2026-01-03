@@ -6,6 +6,7 @@ from struct import pack, unpack, calcsize
 from enum import Enum
 
 TAGS = {}
+TAG_PY_TYPES = {}
 
 """
 I'm sorry i know this isn't the greatest way to do this.
@@ -13,13 +14,15 @@ But i didn't want to get stunlocked just while trying to figure out "the correct
 """
 
 class Tag:
-	def __init__(self, name: str, tag: int, tag_mask: int = 0xFF, fmt: str = ''):
+	def __init__(self, name: str, underlying_type: type, tag: int, tag_mask: int = 0xFF, fmt: str = ''):
 		self.name = name
+		self.underlying_type = underlying_type
 		self.tag = tag
 		self.tag_mask = tag_mask
 		self.data_size = calcsize(fmt)
 		self.fmt = fmt
 		TAGS[name] = self
+		TAG_PY_TYPES[name] = underlying_type
 	
 	def match(self, byte: int) -> bool:
 		"""Checks the byte to see if it matches this tag"""
@@ -34,53 +37,53 @@ class Tag:
 
 		return byte & value_mask
 
-Tag('+fixint', 0, 0b10000000)
-Tag('-fixint', 0b11100000, 0b11100000)
-Tag('fixmap', 0b10000000, 0b11110000)
-Tag('fixarray', 0b10010000, 0b11110000)
-Tag('fixstr', 0b10100000, 0b11100000)
+Tag('+fixint', int, 0, 0b10000000)
+Tag('-fixint', int, 0b11100000, 0b11100000)
+Tag('fixmap', dict, 0b10000000, 0b11110000)
+Tag('fixarray', list, 0b10010000, 0b11110000)
+Tag('fixstr', str, 0b10100000, 0b11100000)
 
-Tag('nil', 0xc0)
-Tag('(never used)', 0xc1)
-Tag('false', 0xc2)
-Tag('true', 0xc3)
+Tag('nil', None, 0xc0)
+Tag('(never used)', None, 0xc1)
+Tag('false', bool, 0xc2)
+Tag('true', bool, 0xc3)
 
-Tag('bin8', 0xc4, fmt='>B')
-Tag('bin16', 0xc5, fmt='>H')
-Tag('bin32', 0xc6, fmt='>I')
+Tag('bin8', bytes, 0xc4, fmt='>B')
+Tag('bin16', bytes, 0xc5, fmt='>H')
+Tag('bin32', bytes, 0xc6, fmt='>I')
 
-Tag('ext8', 0xc7, fmt='>Bb')
-Tag('ext16', 0xc8, fmt='>Hb')
-Tag('ext32', 0xc9, fmt='>Ib')
+Tag('ext8', bytes, 0xc7, fmt='>Bb')
+Tag('ext16', bytes, 0xc8, fmt='>Hb')
+Tag('ext32', bytes, 0xc9, fmt='>Ib')
 
-Tag('float32', 0xca, fmt='>f')
-Tag('float64', 0xcb, fmt='>d')
+Tag('float32', float, 0xca, fmt='>f')
+Tag('float64', float, 0xcb, fmt='>d')
 
-Tag('uint8', 0xcc, fmt='>B')
-Tag('uint16', 0xcd, fmt='>H')
-Tag('uint32', 0xce, fmt='>I')
-Tag('uint64', 0xcf, fmt='>Q')
+Tag('uint8', int, 0xcc, fmt='>B')
+Tag('uint16', int, 0xcd, fmt='>H')
+Tag('uint32', int, 0xce, fmt='>I')
+Tag('uint64', int, 0xcf, fmt='>Q')
 
-Tag('int8', 0xd0, fmt='>b')
-Tag('int16', 0xd1, fmt='>h')
-Tag('int32', 0xd2, fmt='>i')
-Tag('int64', 0xd3, fmt='>q')
+Tag('int8', int, 0xd0, fmt='>b')
+Tag('int16', int, 0xd1, fmt='>h')
+Tag('int32', int, 0xd2, fmt='>i')
+Tag('int64', int, 0xd3, fmt='>q')
 
-Tag('fixext1', 0xd4, fmt='>b1s')
-Tag('fixext2', 0xd5, fmt='>b2s')
-Tag('fixext4', 0xd6, fmt='>b4s')
-Tag('fixext8', 0xd7, fmt='>b8s')
-Tag('fixext16', 0xd8, fmt='>b16s')
+Tag('fixext1', bytes, 0xd4, fmt='>b1s')
+Tag('fixext2', bytes, 0xd5, fmt='>b2s')
+Tag('fixext4', bytes, 0xd6, fmt='>b4s')
+Tag('fixext8', bytes, 0xd7, fmt='>b8s')
+Tag('fixext16', bytes, 0xd8, fmt='>b16s')
 
-Tag('str8', 0xd9, fmt='>B')
-Tag('str16', 0xda, fmt='>H')
-Tag('str32', 0xdb, fmt='>I')
+Tag('str8', str, 0xd9, fmt='>B')
+Tag('str16', str, 0xda, fmt='>H')
+Tag('str32', str, 0xdb, fmt='>I')
 
-Tag('array16', 0xdc, fmt='>H')
-Tag('array32', 0xdd, fmt='>I')
+Tag('array16', list, 0xdc, fmt='>H')
+Tag('array32', list, 0xdd, fmt='>I')
 
-Tag('map16', 0xde, fmt='>H')
-Tag('map32', 0xdf, fmt='>I')
+Tag('map16', dict, 0xde, fmt='>H')
+Tag('map32', dict, 0xdf, fmt='>I')
 
 class FamilyBase:
 	def serialize(writer, data):
@@ -104,7 +107,7 @@ class MPLReader:
 	def read_next(self):
 		"""Reads the next Tag"""
 		data = self.file.read(1)
-		assert data is not None, "Unexpected EOF"
+		assert data is not None and (len(data) == 1), "Unexpected EOF"
 		data = data[0] # converts to int but int(data) does not? thanks python
 		for tag_name in TAGS:
 			tag = TAGS[tag_name]
@@ -123,7 +126,7 @@ class MPLReader:
 
 		else:
 			# data is embedded in that same first byte
-			return tag.name, (tag.get_value(tag_byte))
+			return tag.name, tuple([tag.get_value(tag_byte)])
 	"""
 	I thought about adding functionality that would read a tag, and then the arbitrary data after it (such as arrays, maps, or byte arrays).
 	But since this is just a lite module made for parsing/writing raw tags and maybe some values, i decided not to.

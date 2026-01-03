@@ -1,0 +1,77 @@
+{
+	"pivots":
+	{
+		"bottomStudsPivot":
+		{
+			"center":
+			{
+				"x": 0,
+				"y": 0,
+				"z": 0
+			},
+			"halfExtent":
+			{
+				"x": 30,
+				"y": 30,
+				"z": 6
+			}
+		},
+		"studsExpandedPivot":
+		{
+			"center":
+			{
+				"x": 0,
+				"y": 0,
+				"z": 0
+			},
+			"halfExtent":
+			{
+				"x": 30,
+				"y": 30,
+				"z": 6
+			}
+		},
+		"topStudsPivot":
+		{
+			"center":
+			{
+				"x": 0,
+				"y": 0,
+				"z": 0
+			},
+			"halfExtent":
+			{
+				"x": 30,
+				"y": 30,
+				"z": 6
+			}
+		},
+		"boundsPivot":
+		{
+			"center":
+			{
+				"x": 0,
+				"y": 0,
+				"z": 0
+			},
+			"halfExtent":
+			{
+				"x": 30,
+				"y": 30,
+				"z": 6
+			}
+		},
+		"bottomStudsDirection": "Z_Negative",
+		"topStudsDirection": "Z_Positive",
+		"bBottomStudsValid": true,
+		"bTopStudsValid": true
+	},
+	"addedGlobalGridOffset":
+	{
+		"x": -50,
+		"y": -30,
+		"z": -6
+	},
+	"bIsPhysicsGrid": false,
+	"bFreezePhysicsGrid": false
+}

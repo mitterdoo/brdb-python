@@ -1,0 +1,18 @@
+{
+	"type": "Prefab",
+	"iD": "00000000-0000-0000-0000-000000000000",
+	"name": "",
+	"version": "",
+	"tags": [],
+	"authors": [
+		{
+			"iD": "01af43f9-4a77-4020-b596-c0a0c1d51cbf",
+			"name": "Ranthos"
+		}
+	],
+	"createdAt": "2026.01.02-04.00.53",
+	"updatedAt": "2026.01.02-04.00.53",
+	"description": "Basic prefab with a phys grid and some wires",
+	"dependencies": [],
+	"gameVersion": "CL12560"
+}
