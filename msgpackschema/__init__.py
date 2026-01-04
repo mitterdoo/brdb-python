@@ -3,7 +3,13 @@ import logging
 from .errors import *
 from .msgpack_lite import MPLReader, TAG_PY_TYPES
 from struct import unpack, calcsize
+from enum import IntEnum
+from pprint import pp
 
+"""TODO maybe
+Possibly rewrite this module to be closer towards the Rust brdb library. the idea of read_f64 being able to read any compatible Tag is pretty neat.
+see brdb/crates/brdb/src/schema/read.rs in brdb rust library
+"""
 VALID_TYPES = {
 	'bool': ('true', 'false'),
 	'u8': ('+fixint', 'uint8'),
@@ -22,9 +28,25 @@ VALID_TYPES = {
 	'str': ('fixstr', 'str8', 'str16', 'str32'),
 
 	'object': ('+fixint', '-fixint', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32'),
-	'class': ('+fixint', '-fixint', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32')
+	'class': ('+fixint', '-fixint', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32'),
 
 }
+
+# bricj functionality
+VALID_TYPES['wire_graph_variant'] = VALID_TYPES['f64'] # can be a f64, int, bool, an "object", or exec
+VALID_TYPES['wire_graph_prim_math_variant'] = VALID_TYPES['f64'] # can be a f64 or int
+
+class WireVariantType(IntEnum):
+	NUMBER = 0
+	INT = 1
+	BOOL = 2
+	OBJECT = 3
+	EXEC = 4
+	
+class WireVariant:
+	def __init__(self, typ: WireVariantType, value: any = None):
+		self.type = typ
+		self.value = value
 
 VALID_ENUM_TYPES = (bool, int)
 
@@ -73,6 +95,21 @@ class MPS:
 	
 	The Rust library for brdb files notes this discrepancy and its source code may have more insight on how it works under the hood.
 	https://github.com/brickadia-community/brdb/
+
+	Undocumented spec changes:
+	* builtin type wire_graph_variant is a kind of enum
+	{
+		0: 'f64', # Number
+		1: 'int', # Int
+		2: 'bool', # Bool
+		3: 'object', # object
+		4: 'exec', # exec
+	}
+	* builtin type wire_graph_prim_math_variant:
+	{
+		0: 'f64', # number
+		1: 'int' # int
+	}
 	"""
 	
 	# ----------
@@ -83,13 +120,12 @@ class MPS:
 		self._enums = {}
 		self._structs: PropertyType = {}
 		self.logger = logging.getLogger('MPS')
-		# temporary
-		logging.basicConfig(level=logging.DEBUG)
 	
 	def import_schema(self, schema_data: bytes):
 		"""Imports the contents of a .schema file (`schema_data` as bytes) and adds the Enums and Structs to this object's registry."""
 		
 		dumped = msgpack.unpackb(schema_data)
+		pp(dumped)
 		assert type(dumped) is list, f'Schema must have an array/list as the root'
 		assert len(dumped) == 2, f'Schema root map must have 2 children (enums and structs), but has {len(dumped)} instead.'
 		assert type(dumped[0]) is dict, f'Schema enums section must be a map/dict, but it\'s {type(dumped[0])} instead.'
@@ -215,7 +251,14 @@ class MPS:
 				# not an array
 
 				result_value = values[0]
-				if value_type == 'str':
+				if value_type in ('wire_graph_variant', 'wire_graph_prim_math_variant'):
+					# result value is the type of the variant
+					try:
+						variant_type = WireVariantType(result_value)
+					except ValueError:
+						raise ValueError(f'unknown wire graph variant type {result_value}')
+					raise NotImplemented
+				elif value_type == 'str':
 					# result value is len of string
 					result_bytes = self._file_like.read(result_value)
 					assert (result_bytes is not None) and (len(result_bytes) == result_value), f'unexpected EOF while reading a string of {result_value} bytes'
@@ -494,7 +537,9 @@ class MPS:
 		if name in self._structs:
 			raise DuplicateError(f'struct \'{name}\' has already been registered')
 		if len(contents) == 0:
-			raise ValueError(f'attempt to create struct with no properties')
+			# raise ValueError(f'attempt to create struct with no properties')
+			# Zeb's gist said that a struct must have one or more properties. yet, as of 3 Jan 2026, a prefab can be exported with a ComponentsShared.schema with an empty 'BrickComponentData_Rerouter' struct. oh well
+			pass
 
 		s = {} # final result to actually place in registry
 		for property_name in contents:
@@ -531,7 +576,7 @@ class MPS:
 
 				case _:
 					raise RegistrationError(f'struct \'{name}\' unexpected property value of type \'{type(property_type)}\' (expected str, list, or dict)')
-			print(f'struct {name}.{property_name} registered')
+			self.logger.debug(f'struct {name}.{property_name} registered')
 		self._structs[name] = s
-		print(f'struct {name} registered')
+		self.logger.debug(f'struct {name} registered')
 
