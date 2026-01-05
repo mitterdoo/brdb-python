@@ -1,5 +1,8 @@
 """a "lite" version of the msgpack standard.
 Only has functionality to read and write the standard control tags (like fixint, fixarray, etc.)
+
+Tag is a "registered" Tag that is part of the format.
+Marker is an instantiated class that has an assigned Tag type, and an optional value if extracted from the single byte
 """
 
 from struct import pack, unpack, calcsize
@@ -36,6 +39,29 @@ class Tag:
 			return 0
 
 		return byte & value_mask
+
+class Marker:
+	def __init__(self, tag: Tag, value: any = None):
+		self.tag = tag
+		self.value = value
+	
+	"""
+	Allow syntax of checking if Marker is a certain type
+	e.g. Marker(Tag('fixmap')) == 'fixmap' would return True
+	Also allows 'in' keyword
+	Marker(Tag('fixmap')) in ('fixmap', 'map16', 'map32') would return True
+	"""
+	def __eq__(self, other):
+		if type(other) is str:
+			return self.tag.name == other
+		else:
+			return super().__eq__(other)
+	
+	def __ne__(self, other):
+		if type(other) is str:
+			return self.tag.name != other
+		else:
+			return super().__ne__(other)
 
 Tag('+fixint', int, 0, 0b10000000)
 Tag('-fixint', int, 0b11100000, 0b11100000)
@@ -98,40 +124,56 @@ class IntegerFamily(FamilyBase):
 		Automatically selects the lowest possible bits to use, but can be overridden with bits argument"""
 		raise NotImplemented
 		# assert type(data) is int, f'expecting data of type int but got \'{type(data)}\''
-	
 
-class MPLReader:
-	def __init__(self, file_like):
-		self.file = file_like
-	
-	def read_next(self):
-		"""Reads the next Tag"""
-		data = self.file.read(1)
-		assert data is not None and (len(data) == 1), "Unexpected EOF"
-		data = data[0] # converts to int but int(data) does not? thanks python
-		for tag_name in TAGS:
-			tag = TAGS[tag_name]
-			if tag.match(data):
-				return self._unpack_tag(tag, data)
-		raise ValueError(f'unknown msgpack tag {hex(data)}')
-		
-	def _unpack_tag(self, tag: Tag, tag_byte: int):
-		"""Unpacks a Tag's name and a tuple of any  subsequent values that come after it"""
-		if tag.data_size > 0:
-			# expecting to read multiple things
-			data = self.file.read(tag.data_size)
-			assert (data is not None) and (len(data) == tag.data_size), 'Unexpected EOF'
-			values = unpack(tag.fmt, data)
-			return tag.name, values
+def read_marker(buf) -> Marker:
+	"""Reads a single byte and decodes it into a Marker, embedding any necessary value inside"""
+	data = buf.read(1)
+	assert len(data) == 1, 'Unexpected EOF'
+	data = data[0] # convert to int
 
-		else:
-			# data is embedded in that same first byte
-			return tag.name, tuple([tag.get_value(tag_byte)])
-	"""
-	I thought about adding functionality that would read a tag, and then the arbitrary data after it (such as arrays, maps, or byte arrays).
-	But since this is just a lite module made for parsing/writing raw tags and maybe some values, i decided not to.
-	Instead, it just returns the name of the tag, and any values associated with it.
-	Reading any subsequent data such as array elements or byte buffers is left up to the tag interpreter (i.e. MPS)
-	"""
+	for tag_name in TAGS:
+		tag = TAGS[tag_name]
+		if tag.match(data):
+			if tag.tag_mask != 0xFF:
+				return Marker(tag, tag.get_value(data))
+			else:
+				return Marker(tag)
+	raise ValueError(f'unknown msgpack tag {hex(data)}')
+
+def read_next(buf, *expected_types):
+	"""Reads the next msgpack Tag from the given file-like buffer, and the unpacked value(s) if any.
+	List any Tag or compatible type to do an extra check and make sure the intended type was read"""
+	marker = read_marker(buf)
+	if expected_types is not None and marker not in expected_types:
+		raise TypeError(f'expected a Tag compatible with expected type(s) {repr(expected_types)} but got \'{marker.tag.name}\' instead')
+
+	return _unpack_tag(buf, marker)
+
+def read_any(buf):
+	"""Reads any msgpack Tag, returning the name of the Tag read, and the values that were unpacked from it.
+	Does not include any n-length arrays of data afterwards"""
+	marker = read_marker(buf)
+	return _unpack_tag(buf, marker)
+
+def _unpack_tag(buf, marker: Marker):
+	"""Unpacks a Tag's name and a tuple of any subsequent values that come after it"""
+	tag = marker.tag
+	if tag.data_size > 0:
+		# expecting to read multiple things
+		data = buf.read(tag.data_size)
+		assert len(data) == tag.data_size, 'Unexpected EOF'
+		values = unpack(tag.fmt, data)
+		return tag.name, values
+
+	else:
+		# data is embedded in that same first byte as stored in Marker
+		return tag.name, tuple([marker.value])
+
+"""
+I thought about adding functionality that would read a tag, and then the arbitrary data after it (such as arrays, maps, or byte arrays).
+But since this is just a lite module made for parsing/writing raw tags and maybe some values, i decided not to.
+Instead, it just returns the name of the tag, and any values associated with it.
+Reading any subsequent data such as array elements or byte buffers is left up to the tag interpreter (i.e. MPS)
+"""
 
 
